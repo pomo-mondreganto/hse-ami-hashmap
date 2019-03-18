@@ -28,114 +28,64 @@ class HashMap {
     std::vector<std::vector<std::shared_ptr<Element>>> inner_state;
     std::vector<std::shared_ptr<Element>> all_inserted;
 
+    template<typename element_type, typename inner_type>
+    class _iterator {
+     private:
+        inner_type inner;
+        inner_type real_end;
+
+     public:
+        _iterator() {}
+
+        _iterator(const _iterator& other):
+        inner(other.inner),
+        real_end(other.real_end) {}
+
+        _iterator(const inner_type& it, const inner_type& end):
+        inner(it),
+        real_end(end) {}
+
+        _iterator& operator++() {
+            ++inner;
+            while (inner != real_end && (*inner)->is_marked) {
+                ++inner;
+            }
+            return *this;
+        }
+
+        _iterator operator++(int) {
+            _iterator tmp = *this;
+            ++(*this);
+            return tmp;
+        }
+
+        element_type& operator*() const {
+            return *reinterpret_cast<element_type*>(&(*inner)->val);
+        }
+
+        element_type* operator->() const {
+            return reinterpret_cast<element_type*>(&(*inner)->val);
+        }
+
+        bool operator==(const _iterator& other) const {
+            return inner == other.inner;
+        }
+
+        bool operator!=(const _iterator &other) const {
+            return inner != other.inner;
+        }
+    };
+
  public:
-    class iterator {
-     private:
-        using inner_type = typename std::vector<
-        std::shared_ptr<Element>
-        >::iterator;
-        inner_type inner;
-        inner_type real_end;
-
-     public:
-        iterator() {}
-
-        iterator(const iterator& other):
-        inner(other.inner),
-        real_end(other.real_end) {}
-
-        iterator(const inner_type& it, const inner_type& end):
-        inner(it),
-        real_end(end) {}
-
-        iterator& operator++() {
-            ++inner;
-            while (inner != real_end && (*inner)->is_marked) {
-                ++inner;
-            }
-            return *this;
-        }
-
-        iterator operator++(int) {
-            iterator tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        std::pair<const KeyType, ValueType>& operator*() const {
-            return *reinterpret_cast<
-            std::pair<const KeyType, ValueType>*
-            >(&(*inner)->val);
-        }
-
-        std::pair<const KeyType, ValueType>* operator->() const {
-            return reinterpret_cast<
-            std::pair<const KeyType, ValueType>*
-            >(&(*inner)->val);
-        }
-
-        bool operator==(const iterator& other) const {
-            return inner == other.inner;
-        }
-
-        bool operator!=(const iterator &other) const {
-            return inner != other.inner;
-        }
-    };
-
-    class const_iterator {
-     private:
-        using inner_type = typename std::vector<
-        std::shared_ptr<Element>
-        >::const_iterator;
-        inner_type inner;
-        inner_type real_end;
-
-     public:
-        const_iterator() {}
-
-        const_iterator(const const_iterator& other):
-        inner(other.inner),
-        real_end(other.real_end) {}
-
-        const_iterator(const inner_type& it, const inner_type& end):
-        inner(it),
-        real_end(end) {}
-
-        const_iterator& operator++() {
-            ++inner;
-            while (inner != real_end && (*inner)->is_marked) {
-                ++inner;
-            }
-            return *this;
-        }
-
-        const_iterator operator++(int) {
-            const_iterator tmp = *this;
-            ++(*this);
-            return tmp;
-        }
-
-        const std::pair<const KeyType, ValueType>& operator*() const {
-            return *reinterpret_cast<
-            const std::pair<const KeyType, ValueType>*
-            >(&(*inner)->val);
-        }
-
-        const std::pair<const KeyType, ValueType>* operator->() const {
-            return reinterpret_cast<
-            const std::pair<const KeyType, ValueType>*
-            >(&(*inner)->val);
-        }
-
-        bool operator==(const const_iterator& other) const {
-            return inner == other.inner;
-        }
-
-        bool operator!=(const const_iterator &other) const {
-            return inner != other.inner;
-        }
-    };
+    
+    using iterator = _iterator<
+        std::pair<const KeyType, ValueType>,
+        typename std::vector<std::shared_ptr<Element>>::iterator
+    >;
+    using const_iterator = _iterator<
+        const std::pair<const KeyType, ValueType>,
+        typename std::vector<std::shared_ptr<Element>>::const_iterator
+    >;
 
     explicit HashMap(Hash _hasher = Hash()):
     hasher(_hasher), inner_size(0) {
@@ -154,10 +104,26 @@ class HashMap {
 
     HashMap(std::initializer_list<stored_type> list, Hash _hasher = Hash()):
     hasher(_hasher), inner_size(0) {
-        inner_state.resize(TABLE_SIZE);
-        for (auto it: list) {
-            insert(it);
-        }
+        *this = std::move(HashMap(list.begin(), list.end(), hasher));
+    }
+
+    HashMap(const HashMap& other) {
+        *this = std::move(HashMap(other.begin(), other.end()));
+    }
+
+    HashMap& operator=(const HashMap& other) {
+        HashMap tmp(other);
+        hasher = tmp.hasher;
+        inner_size = tmp.inner_size;
+        inner_state = std::move(tmp.inner_state);
+        all_inserted = std::move(tmp.all_inserted);
+        return *this;
+    }
+
+    HashMap(HashMap&& other): 
+    hasher(other.hasher), inner_size(other.inner_size) {
+        inner_state = std::move(other.inner_state);
+        all_inserted = std::move(other.all_inserted);
     }
 
     size_t size() const {
