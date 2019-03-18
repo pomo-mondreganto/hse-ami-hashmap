@@ -6,10 +6,11 @@
 #include <iostream>
 #include <utility>
 
-const size_t TABLE_SIZE = 277051;
+const size_t START_SIZE = 1087;
+const size_t FILL_CONST = 2;
 template <class KeyType, class ValueType, class Hash = std::hash<KeyType>>
 class HashMap {
- private:
+private:
     using stored_type = std::pair<KeyType, ValueType>;
 
     struct Element {
@@ -24,17 +25,18 @@ class HashMap {
     };
 
     Hash hasher;
-    size_t inner_size;
+    size_t element_count;
+    size_t current_size;
     std::vector<std::vector<std::shared_ptr<Element>>> inner_state;
     std::vector<std::shared_ptr<Element>> all_inserted;
 
     template<typename element_type, typename inner_type>
     class _iterator {
-     private:
+    private:
         inner_type inner;
         inner_type real_end;
 
-     public:
+    public:
         _iterator() {}
 
         _iterator(const _iterator& other):
@@ -76,26 +78,51 @@ class HashMap {
         }
     };
 
- public:
-    
+    explicit HashMap(size_t _size, Hash _hasher = Hash()):
+    hasher(_hasher), element_count(0), current_size(_size) {
+        inner_state.resize(_size);
+    }
+
+    void check_size() {
+        if (FILL_CONST * element_count > current_size) {
+            migrate();
+        }
+    }
+
+    void migrate() {
+        std::vector<std::shared_ptr<Element>> stored = all_inserted;
+        all_inserted.clear();
+        inner_state.clear();
+        current_size *= 2;
+        inner_state.resize(current_size);
+        element_count = 0;
+        for (auto ptr: stored) {
+            if (!(ptr->is_marked)) {
+                insert(ptr->val);
+            }
+        }
+    }
+
+public:
+
     using iterator = _iterator<
-        std::pair<const KeyType, ValueType>,
-        typename std::vector<std::shared_ptr<Element>>::iterator
+    std::pair<const KeyType, ValueType>,
+    typename std::vector<std::shared_ptr<Element>>::iterator
     >;
     using const_iterator = _iterator<
-        const std::pair<const KeyType, ValueType>,
-        typename std::vector<std::shared_ptr<Element>>::const_iterator
+    const std::pair<const KeyType, ValueType>,
+    typename std::vector<std::shared_ptr<Element>>::const_iterator
     >;
 
     explicit HashMap(Hash _hasher = Hash()):
-    hasher(_hasher), inner_size(0) {
-        inner_state.resize(TABLE_SIZE);
+    hasher(_hasher), element_count(0), current_size(START_SIZE) {
+        inner_state.resize(START_SIZE);
     }
 
     template <class Iter>
     HashMap(Iter begin, Iter end, Hash _hasher = Hash()):
-    hasher(_hasher), inner_size(0) {
-        inner_state.resize(TABLE_SIZE);
+    hasher(_hasher), element_count(0), current_size(START_SIZE) {
+        inner_state.resize(START_SIZE);
         while (begin != end) {
             insert(*begin);
             ++begin;
@@ -103,35 +130,39 @@ class HashMap {
     }
 
     HashMap(std::initializer_list<stored_type> list, Hash _hasher = Hash()):
-    hasher(_hasher), inner_size(0) {
-        *this = std::move(HashMap(list.begin(), list.end(), hasher));
+    hasher(_hasher), element_count(0) {
+        *this = HashMap(list.begin(), list.end(), hasher);
     }
 
     HashMap(const HashMap& other) {
-        *this = std::move(HashMap(other.begin(), other.end()));
+        *this = HashMap(other.begin(), other.end());
     }
 
     HashMap& operator=(const HashMap& other) {
         HashMap tmp(other);
         hasher = tmp.hasher;
-        inner_size = tmp.inner_size;
+        element_count = tmp.element_count;
+        current_size = tmp.current_size;
         inner_state = std::move(tmp.inner_state);
         all_inserted = std::move(tmp.all_inserted);
         return *this;
     }
 
-    HashMap(HashMap&& other): 
-    hasher(other.hasher), inner_size(other.inner_size) {
+    HashMap& operator=(HashMap&& other) {
+        hasher = other.hasher;
+        element_count = other.element_count;
+        current_size = other.current_size;
         inner_state = std::move(other.inner_state);
         all_inserted = std::move(other.all_inserted);
+        return *this;
     }
 
     size_t size() const {
-        return inner_size;
+        return element_count;
     }
 
     bool empty() const {
-        return inner_size == 0;
+        return element_count == 0;
     }
 
     Hash hash_function() const {
@@ -141,7 +172,12 @@ class HashMap {
     void insert(const stored_type &val) {
         size_t hashmap_key = hasher(val.first) % inner_state.size();
         for (const auto &it: inner_state[hashmap_key]) {
-            if (it->val.first == val.first && !it->is_marked) {
+            if (it->val.first == val.first) {
+                if (it->is_marked) {
+                    it->is_marked = false;
+                    ++element_count;
+                    check_size();
+                }
                 return;
             }
         }
@@ -149,16 +185,17 @@ class HashMap {
         std::make_shared<Element>(val, all_inserted.size());
         inner_state[hashmap_key].push_back(to_insert);
         all_inserted.push_back(to_insert);
-        ++inner_size;
+        ++element_count;
+        check_size();
     }
 
     void erase(const KeyType &key) {
-        size_t hashmap_key = hasher(key) % inner_state.size();
+        size_t hashmap_key = hasher(key) % current_size;
 
         for (auto &it: inner_state[hashmap_key]) {
             if (it->val.first == key && !it->is_marked) {
                 it->is_marked = true;
-                --inner_size;
+                --element_count;
                 return;
             }
         }
@@ -187,7 +224,7 @@ class HashMap {
     }
 
     iterator find(const KeyType& key) {
-        size_t hashmap_key = hasher(key) % inner_state.size();
+        size_t hashmap_key = hasher(key) % current_size;
 
         for (auto &it: inner_state[hashmap_key]) {
             if (it->val.first == key && !it->is_marked) {
@@ -200,7 +237,7 @@ class HashMap {
     }
 
     const_iterator find(const KeyType& key) const {
-        size_t hashmap_key = hasher(key) % inner_state.size();
+        size_t hashmap_key = hasher(key) % current_size;
 
         for (auto &it: inner_state[hashmap_key]) {
             if (it->val.first == key && !it->is_marked) {
@@ -213,7 +250,7 @@ class HashMap {
     }
 
     ValueType& operator[](const KeyType& key) {
-        size_t hashmap_key = hasher(key) % inner_state.size();
+        size_t hashmap_key = hasher(key) % current_size;
         for (auto &it: inner_state[hashmap_key]) {
             if (it->val.first == key && !it->is_marked) {
                 return it->val.second;
@@ -225,7 +262,7 @@ class HashMap {
     }
 
     const ValueType& at(const KeyType& key) const {
-        size_t hashmap_key = hasher(key) % inner_state.size();
+        size_t hashmap_key = hasher(key) % current_size;
         for (auto &it: inner_state[hashmap_key]) {
             if (it->val.first == key && !it->is_marked) {
                 return it->val.second;
@@ -236,11 +273,10 @@ class HashMap {
     }
 
     void clear() {
-        for (auto& it: all_inserted) {
-            size_t hashmap_key = hasher(it->val.first) % inner_state.size();
-            inner_state[hashmap_key].clear();
-        }
         all_inserted.clear();
-        inner_size = 0;
+        inner_state.clear();
+        element_count = 0;
+        current_size = START_SIZE;
+        inner_state.resize(START_SIZE);
     }
 };
