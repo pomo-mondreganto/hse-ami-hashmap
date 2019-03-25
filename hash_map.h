@@ -1,3 +1,6 @@
+#ifndef HASH_MAP_H_
+#define HASH_MAP_H_
+
 #include <vector>
 #include <algorithm>
 #include <exception>
@@ -6,11 +9,13 @@
 #include <iostream>
 #include <utility>
 
-const size_t START_SIZE = 1087;
-const size_t FILL_CONST = 2;
+namespace hashmap {
+
+static constexpr size_t START_SIZE = 1087;
+static constexpr size_t FILL_CONST = 2;
 template <class KeyType, class ValueType, class Hash = std::hash<KeyType>>
 class HashMap {
-private:
+ private:
     using stored_type = std::pair<KeyType, ValueType>;
 
     struct Element {
@@ -32,11 +37,11 @@ private:
 
     template<typename element_type, typename inner_type>
     class _iterator {
-    private:
+     private:
         inner_type inner;
         inner_type real_end;
 
-    public:
+     public:
         _iterator() {}
 
         _iterator(const _iterator& other):
@@ -93,7 +98,7 @@ private:
         std::vector<std::shared_ptr<Element>> stored = all_inserted;
         all_inserted.clear();
         inner_state.clear();
-        current_size *= 2;
+        current_size *= FILL_CONST;
         inner_state.resize(current_size);
         element_count = 0;
         for (auto ptr: stored) {
@@ -103,8 +108,7 @@ private:
         }
     }
 
-public:
-
+ public:
     using iterator = _iterator<
     std::pair<const KeyType, ValueType>,
     typename std::vector<std::shared_ptr<Element>>::iterator
@@ -130,12 +134,19 @@ public:
     }
 
     HashMap(std::initializer_list<stored_type> list, Hash _hasher = Hash()):
-    hasher(_hasher), element_count(0) {
-        *this = HashMap(list.begin(), list.end(), hasher);
-    }
+    HashMap(list.begin(), list.end(), _hasher) {}
 
     HashMap(const HashMap& other) {
         *this = HashMap(other.begin(), other.end());
+    }
+
+    HashMap(HashMap&& other) {
+        hasher = other.hasher;
+        element_count = other.element_count;
+        current_size = other.current_size;
+        inner_state = std::move(other.inner_state);
+        all_inserted = std::move(other.all_inserted);
+        return *this;
     }
 
     HashMap& operator=(const HashMap& other) {
@@ -279,4 +290,25 @@ public:
         current_size = START_SIZE;
         inner_state.resize(START_SIZE);
     }
+
+    void shrink_to_fit() {
+        std::vector<std::shared_ptr<Element>> stored;
+        for (auto it : all_inserted) {
+            if (!it->is_marked) {
+                stored.push_back(it);
+            }
+        }
+        all_inserted.clear();
+        inner_state.clear();
+        current_size = stored.size() * FILL_CONST * FILL_CONST;
+        inner_state.resize(current_size);
+        element_count = 0;
+        for (auto ptr: stored) {
+            insert(ptr->val);
+        }
+    }
 };
+
+}  // namespace hashmap
+
+#endif  // HASH_MAP_H_
