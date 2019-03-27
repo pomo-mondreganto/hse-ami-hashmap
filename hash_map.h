@@ -143,13 +143,7 @@ class HashMap {
     HashMap(HashMap&& other) = default;
 
     HashMap& operator=(const HashMap& other) {
-        HashMap tmp(other);
-        hasher = tmp.hasher;
-        element_count = tmp.element_count;
-        current_size = tmp.current_size;
-        inner_state = std::move(tmp.inner_state);
-        all_inserted = std::move(tmp.all_inserted);
-        return *this;
+        *this = HashMap(other);
     }
 
     HashMap& operator=(HashMap&& other) noexcept = default;
