@@ -140,14 +140,7 @@ class HashMap {
         *this = HashMap(other.begin(), other.end());
     }
 
-    HashMap(HashMap&& other) {
-        hasher = other.hasher;
-        element_count = other.element_count;
-        current_size = other.current_size;
-        inner_state = std::move(other.inner_state);
-        all_inserted = std::move(other.all_inserted);
-        return *this;
-    }
+    HashMap(HashMap&& other) = default;
 
     HashMap& operator=(const HashMap& other) {
         HashMap tmp(other);
@@ -159,14 +152,7 @@ class HashMap {
         return *this;
     }
 
-    HashMap& operator=(HashMap&& other) {
-        hasher = other.hasher;
-        element_count = other.element_count;
-        current_size = other.current_size;
-        inner_state = std::move(other.inner_state);
-        all_inserted = std::move(other.all_inserted);
-        return *this;
-    }
+    HashMap& operator=(HashMap&& other) noexcept = default;
 
     size_t size() const {
         return element_count;
